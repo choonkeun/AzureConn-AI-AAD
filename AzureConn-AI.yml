@@ -1,0 +1,64 @@
+trigger:
+- none
+
+pool:
+  vmImage: 'windows-latest'
+
+variables:
+  ToBeReplaced: 'This value  is for web.config'
+  connectionStrings:CONN : 'connectionStrings is for web.config'
+  web: '$$$$$12345'
+  prod: '$$$$$12345'
+  CONN : 'Data Source=******.database.windows.net;Initial Catalog=BookStores;User ID=$$$$$;Password=$$$$$12345'
+  ReplaceKeyValue.ConnectionString : 'This connectionstring value is for appsettings.json'
+
+#$(Build.SourcesDirectory) equates to / (c:\agent_work\1\s)
+
+steps:
+
+- task: FileTransform@1
+  inputs:
+    folderPath: '$(System.DefaultWorkingDirectory)'
+    fileType: 'json'
+    targetFiles: 'appsettings.json'
+
+- task: FileTransform@1
+  inputs:
+    folderPath: '$(System.DefaultWorkingDirectory)'
+    enableXmlTransform: true
+    xmlTransformationRules: -transform **/*.Release.config -xml **/*.config
+    fileType: 'xml'
+    targetFiles: 'web.config'
+
+- task: PowerShell@2
+  displayName: "Confirm web.config transform"
+  inputs:
+    targetType: 'inline'
+    script: 'cat $env:System_DefaultWorkingDirectory/web.config'
+    errorActionPreference: 'continue'
+
+- task: VSBuild@1
+  displayName: Build Solution
+  inputs:
+    solution: '**/*.sln'
+    msbuildArgs: '/p:Configuration=Release /p:DeployOnBuild=true  /p:DeployTarget=PipelinePreDeployCopyAllFilesToOneFolder /p:AutoParameterizationWebConfigConnectionStrings=false /p:PackageTempRootDir="$(build.artifactStagingDirectory)"'
+    platform: 'Any CPU'
+    configuration: 'Release'
+    restoreNugetPackages: true
+
+- task: PublishBuildArtifacts@1
+  displayName: 'Publish to Artifacets' 
+  inputs:
+    PathtoPublish: '$(build.artifactstagingdirectory)'
+  condition: succeededOrFailed()
+
+- task: AzureRmWebAppDeployment@4
+  inputs:
+    ConnectionType: 'AzureRM'
+    azureSubscription: 'azureSubscription'
+    appType: 'webApp'
+    WebAppName: 'AzureWebForm48-AI-20230331'
+    packageForLinux: '$(build.artifactstagingdirectory)'
+    #packageForLinux: '$(build.artifactstagingdirectory)/**/*.zip'
+    #WebAppName: '$(variables.APPNAME)'
+
